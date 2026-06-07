@@ -1,12 +1,54 @@
-📊 論文復現：結合深層學習與大數據分析增強智慧城市基礎設施與人力資源管理系統 (2026)本專案旨在完整復現 2026 年發表於 Ain Shams Engineering Journal 的頂級期刊論文：Integrating deep learning and big data analytics for enhanced smart city infrastructure and human resource management systems > Jianjun Zhang, Ao Zhang, Xingying Liu, Pan Luo (2026)此儲存庫專注於 HRMS 人力資源管理系統 分支中的 IBM HR Analytics Employee Attrition 員工離職預測任務 (Section 4.1.2)。🗺️ 專案實作進度 (作戰地圖)[x] 階段一：環境建置與資料集準備 (安裝 PyTorch, Scipy 等依賴套件)[x] 階段二：資料預處理與「表格轉圖像」技術 (對應 Section 3.4.1，將 104 個主成分特徵映射至 $224 \times 224 \times 3$ 空間張量)[x] 階段三：實作 USCO 優化器 (獨立模組 usco_optimizer.py，完整實作 Section 3.2 與 3.3 之兩階段探索與逃脫機制)[x] 階段四：建構 EfficientNet 分類模型 (配置動態 GPU 偵測，無縫適應 T4 GPU 與 CPU 環境)[x] 階段五：模型聯合訓練與 USCO 調參 (執行 500 次尋優，自動搜索黃金學習率、Batch Size 與 Epochs)[x] 階段六：模型驗證與八大對齊指標評估 (嚴格輸出 ACC, SP, SE, PR, FS, MCC, DSC, IoU 並對照論文)📂 檔案目錄結構hr_attrition_replication/
-├── 1_environment_and_EDA.ipynb      # 主程序 (資料預處理、模型建構、訓練與評估)
-├── usco_optimizer.py                # 智慧型單一候選解優化器 (USCO 核心算法)
-├── README.md                        # 本說明文件
-└── archive/                         # 資料集存放目錄
-     └── 📄 WA_Fn-UseC_-HR-Employee-Attrition.csv  # IBM HR 原始資料集
-🛠️ 演算法核心架構 (Algorithm Core)1. 表格轉圖像技術 (Tabular-to-Spatial Transformation)依據論文 Section 3.4.1，傳統的表格資料（Tabular Data）無法直接送入卷積神經網路（CNN）學習。本專案精確實現了論文的轉換機制：將 35 個特徵欄位進行 One-Hot 編碼與 Min-Max 標準化。透過 PCA 降維 保留 99% 的變異量，抽取核心特徵。擴展特徵維度至 104 維，並折疊成 $10 \times 10 \times 2$ 的雙通道局部張量（不足處以 Zero-padding 填充）。補充第三個全零通道（R, G, B 對齊），最後透過 雙線性插值 (Bilinear Interpolation) 放大至 $224 \times 224 \times 3$。這使 EfficientNet-B0 能完美學習空間鄰域特徵。2. 自適應超參數調參引擎 (USCO Optimizer)依據論文 Section 3.2 & 3.3，本專案實作了自創的 Updated Single Candidate Optimizer (USCO)。相比於 PSO (粒子群演算法) 與 GA (遺傳演算法)，USCO 僅維護單一候選解，大幅度節省了 GPU 記憶體開銷。空間初始化：使用 Sobol 擬隨機序列 (Sobol Sequence) 代替傳統隨機分布，確保參數搜尋空間的均勻覆蓋。兩階段搜尋：前 $50\%$ 的疊代（探索階段）進行大步幅探索；後 $50\%$ 的疊代（開發階段）進行精細收斂。自適應收斂權重 $w$：$$v = \frac{q \times e^{-b \cdot \text{std}(t)}}{1 + e^{a \cdot (t - \frac{T}{2})}}$$跳脫機制：當評估連續 $m=5$ 次未改善適應度（即卡在局部最優解），演算法會依據公式 (12) 往搜尋空間邊緣做「大步跳躍」以脫離死胡同。🚀 運行與啟動指南運作硬體防禦：Write Once, Run Anywhere本專案代碼內部具有 PyTorch 動態設備偵測 與 Tensor 安全卸載機制：device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-無需修改任何一行代碼，即可自動在 本地 CPU（測試、排錯）與 Google Colab T4 GPU（正式大批量訓練）之間自動切換，百分之百不報錯。運行步驟1. 雲端運行 (Google Colab - 推薦 🚀)在 Google Colab 中匯入 1_environment_and_EDA.ipynb。點選選單 執行階段 -> 變更執行階段類型 -> 選擇 T4 GPU。執行 「步驟 0」 單元格，依照指示上傳 usco_optimizer.py 與 WA_Fn-UseC_-HR-Employee-Attrition.csv。在 步驟 5.4 將 QUICK_DEBUG_MODE 設為 False，釋放 T4 GPU 的算力，執行完整 500 次調參和 50~150 輪訓練。點選 「執行全部」 即可。2. 本地運行 (Local CPU 💻)確保本機安裝有 Python 3.10+，並安裝依賴庫：pip install torch torchvision pandas numpy scikit-learn matplotlib seaborn scipy
-將 QUICK_DEBUG_MODE 設為 True。此時調參疊代次數會強制降為 3 次、訓練輪次降為 1 輪，以防本機 CPU 跑太久而過載。📈 評估指標對照 (Section 4.3 & 5.2)本專案在最終階段（步驟 6.1）將輸出以下八種精確評估指標，並自動與原論文發表的數值進行基準對照：編號評估指標論文公式對應論文發布數值 (IBM HR)1準確率 Accuracy (ACC)$\frac{TP+TN}{TP+TN+FP+FN} \times 100\%$89.70%2特異性 Specificity (SP)$\frac{TN}{TN+FP} \times 100\%$88.90%3敏感度 Sensitivity (SE)$\frac{TP}{TP+FN} \times 100\%$87.50%4精準度 Precision (PR)$\frac{TP}{TP+FP} \times 100\%$88.00%5F1-Score (FS)$2 \times \frac{Precision \times Sensitivity}{Precision + Sensitivity} \times 100\%$87.80%6馬修斯相關係數 (MCC)$\frac{TP \cdot TN - FP \cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}$0.81007戴斯相似係數 (DSC)$\frac{2 \cdot TP}{2 \cdot TP + FP + FN}$0.86008交並比 (IoU)$\frac{TP}{TP+FP+FN}$0.7800📄 授權條款與引用本專案之程式碼僅供學術研究與復現交流使用。若您在研究中引用了本專案，請務必標註原論文資訊：@article{zhang2026integrating,
+# 📊 論文復現：結合深層學習與大數據分析增強智慧城市基礎設施與人力資源管理系統 (2026)
+
+本專案旨在完整復現 2026 年發表於 Ain Shams Engineering Journal 的研究論文，專注於 HRMS 人力資源管理系統中的員工離職預測任務。
+
+## 📁 專案結構 (Project Structure)
+
+```
+.
+├── 📄 1_environment_and_EDA.ipynb      # 主程序 (資料預處理、模型建構、訓練與評估)
+├── 📄 usco_optimizer.py                # 智慧型單一候選解優化器 (USCO 核心算法)
+├── 📄 README.md                        # 本說明文件
+└── 📁 archive/                         # 資料集存放目錄
+    └── 📄 WA_Fn-UseC_-HR-Employee-Attrition.csv  # IBM HR 原始資料集
+```
+
+## 🛠️ 演算法核心架構 (Algorithm Core)
+
+### 1. 表格轉圖像技術 (Tabular-to-Spatial Transformation)
+
+依據論文 Section 3.4.1，傳統的表格資料（Tabular Data）無法直接送入卷積神經網絡。本專案採用創新的表格轉圖像技術，將 HR 員工數據轉換為 2D 圖像矩陣，實現自動特徵提取。
+
+### 2. 智慧單一候選解優化器 (USCO Algorithm)
+
+實現了論文提出的 USCO 演算法，用於超參數自動優化和模型訓練。
+
+## ⚙️ 環境配置 (Environment Setup)
+
+無需修改任何一行代碼，即可自動在本地 CPU（測試、排錯）與 Google Colab T4 GPU（正式大批量訓練）之間自動切換，百分之百不報錯。
+
+### 運行步驟
+
+1. **雲端運行** (推薦)：直接在 Google Colab 中打開 `1_environment_and_EDA.ipynb`
+2. **本地運行**：安裝依賴後在 Jupyter 中執行
+
+### 調試模式
+
+將 `QUICK_DEBUG_MODE` 設為 `True`。此時調參疊代次數會強制降為 3 次、訓練輪次降為 1 輪，以防本機 CPU 跑太久而過載。
+
+## 📈 評估指標對照 (Section 4.3 & 5.2)
+
+本專案使用的評估指標包括：
+- **準確率 (Accuracy)**
+- **精確率 (Precision)**
+- **召回率 (Recall)**
+- **F1-Score**
+- **AUC-ROC**
+
+## 📚 引用 (Citation)
+
+```bibtex
+@article{zhang2026integrating,
   title={Integrating deep learning and big data analytics for enhanced smart city infrastructure and human resource management systems},
   author={Zhang, Jianjun and Zhang, Ao and Liu, Xingying and Luo, Pan},
   journal={Ain Shams Engineering Journal},
@@ -15,3 +57,8 @@
   year={2026},
   publisher={Elsevier}
 }
+```
+
+---
+
+**最後更新**: 2026 年 6 月
